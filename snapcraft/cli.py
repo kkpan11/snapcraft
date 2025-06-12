@@ -230,7 +230,7 @@ def _run_dispatcher(
     emit.ended_ok()
 
 
-def _emit_error(error, cause=None):
+def _emit_error(error: craft_cli.CraftError, cause: BaseException | None = None):
     """Emit the error in a centralized way so we can alter it consistently."""
     # set the cause, if any
     if cause is not None:
@@ -284,7 +284,7 @@ def run():  # noqa: C901 (complex-structure)
                     f"{store.constants.ENVIRONMENT_STORE_CREDENTIALS} "
                     "is correctly exported into the environment"
                 ),
-                docs_url="https://snapcraft.io/docs/snapcraft-authentication",
+                docs_url="https://documentation.ubuntu.com/snapcraft/stable/how-to/publishing/authenticate",
             )
         )
         retcode = 1
@@ -301,7 +301,7 @@ def run():  # noqa: C901 (complex-structure)
         emit.error(
             craft_cli.errors.CraftError(
                 message=f"remote-build error: {err}",
-                docs_url="https://snapcraft.io/docs/remote-build",
+                docs_url="https://documentation.ubuntu.com/snapcraft/stable/explanation/remote-build",
             )
         )
         retcode = 1
