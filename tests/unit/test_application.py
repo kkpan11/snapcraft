@@ -189,7 +189,7 @@ def test_application_extra_yaml_transforms(
     app = application.create_app()
     app.run()
 
-    project = app.get_project()
+    project = app.services.get("project").get()
     assert "fake-extension/fake-part" in project.parts
     assert project.parts["snapcraft/core"]["build-packages"] == ["test-package"]
     assert project.parts["snapcraft/core"]["build-snaps"] == ["test-snap"]
@@ -416,6 +416,20 @@ def test_esm_pass(mocker, snapcraft_yaml, base):
         pass
     else:
         mock_dispatch.assert_called_once()
+
+
+def test_yaml_syntax_error(in_project_path, monkeypatch, capsys):
+    """Provide a user friendly error on yaml syntax errors."""
+    (in_project_path / "snapcraft.yaml").write_text("bad:\nyaml")
+    monkeypatch.setattr("sys.argv", ["snapcraft"])
+
+    application.main()
+
+    _, err = capsys.readouterr()
+    assert re.match(
+        "^error parsing 'snapcraft\\.yaml': .*\nDetailed information:",
+        err,
+    )
 
 
 @pytest.mark.parametrize("envvar", ["disable-fallback", None])
@@ -694,7 +708,7 @@ def test_store_key_error(mocker, capsys):
             """\
             No keyring found to store or retrieve credentials from.
             Recommended resolution: Ensure the keyring is working or SNAPCRAFT_STORE_CREDENTIALS is correctly exported into the environment
-            For more information, check out: https://snapcraft.io/docs/snapcraft-authentication
+            For more information, check out: https://documentation.ubuntu.com/snapcraft/stable/how-to/publishing/authenticate
         """
             # pylint: enable=[line-too-long]
         )

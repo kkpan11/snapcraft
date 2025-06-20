@@ -32,6 +32,7 @@ from snapcraft.models import (
     ContentPlug,
     GrammarAwareProject,
     Hook,
+    Lint,
     Platform,
     Project,
 )
@@ -660,8 +661,8 @@ class TestProjectValidation:
             "Plugs should be assigned to the app to which they apply, and not "
             "implicitly assigned via the global 'plugs:' stanza "
             "which is intended for configuration only."
-            "\n(Reference: https://snapcraft.io/docs/snapcraft-top-level-metadata"
-            "#heading--plugs-and-slots-for-an-entire-snap)"
+            "\n(Reference: https://documentation.ubuntu.com/snapcraft/stable/reference/"
+            "project-file/snapcraft-yaml)"
         )
         emitter.assert_message(expected_message)
 
@@ -673,8 +674,8 @@ class TestProjectValidation:
             "Slots should be assigned to the app to which they apply, and not "
             "implicitly assigned via the global 'slots:' stanza "
             "which is intended for configuration only."
-            "\n(Reference: https://snapcraft.io/docs/snapcraft-top-level-metadata"
-            "#heading--plugs-and-slots-for-an-entire-snap)"
+            "\n(Reference: https://documentation.ubuntu.com/snapcraft/stable/reference/"
+            "project-file/snapcraft-yaml)"
         )
         emitter.assert_message(expected_message)
 
@@ -848,8 +849,8 @@ class TestPlatforms:
 
     def test_platforms_not_allowed_core22(self, project_yaml_data):
         error = (
-            "'platforms' keyword is not supported for base 'core22'. "
-            "Use 'architectures' keyword instead."
+            "'platforms' key is not supported for base 'core22'. "
+            "Use 'architectures' key instead."
         )
         with pytest.raises(pydantic.ValidationError, match=error):
             Project.unmarshal(project_yaml_data(platforms={"amd64": None}))
@@ -2068,10 +2069,10 @@ class TestArchitecture:
         assert not arch_triplet
 
     def test_architectures_not_allowed(self, project_yaml_data):
-        """'architectures' keyword is not allowed if base is not core22."""
+        """'architectures' key is not allowed if base is not core22."""
         error = (
-            "'architectures' keyword is not supported for base 'core24'. "
-            "Use 'platforms' keyword instead."
+            "'architectures' key is not supported for base 'core24'. "
+            "Use 'platforms' key instead."
         )
 
         with pytest.raises(pydantic.ValidationError, match=error):
@@ -2480,3 +2481,23 @@ class TestComponents:
         partitions = test_project.get_partitions()
 
         assert partitions is None
+
+
+class TestLint:
+    """Test the Lint model."""
+
+    def test_lint(self, project_yaml_data):
+        lint_data = {"ignore": ["classic", {"library": ["usr/lib/**/libfoo.so*"]}]}
+        project = Project.unmarshal(project_yaml_data(lint=lint_data))
+
+        assert project.lint == Lint(
+            ignore=["classic", {"library": ["usr/lib/**/libfoo.so*"]}]
+        )
+
+    def test_list_invalid(self, project_yaml_data):
+        """Error on multiple items in an ignore dict."""
+        lint_data = {"ignore": [{"linter-1": ["test"], "linter-2": ["test"]}]}
+        error = "Expected exactly one key in lint ignore entry."
+
+        with pytest.raises(pydantic.ValidationError, match=error):
+            Project.unmarshal(project_yaml_data(lint=lint_data))
