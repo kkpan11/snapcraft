@@ -26,6 +26,8 @@ import craft_application.launchpad
 import craft_application.remote
 import craft_cli
 import craft_parts.plugins
+import craft_parts.plugins.dotnet_plugin
+import craft_parts.plugins.dotnet_v2_plugin
 import craft_store
 import pytest
 import yaml
@@ -189,7 +191,7 @@ def test_application_extra_yaml_transforms(
     app = application.create_app()
     app.run()
 
-    project = app.get_project()
+    project = app.services.get("project").get()
     assert "fake-extension/fake-part" in project.parts
     assert project.parts["snapcraft/core"]["build-packages"] == ["test-package"]
     assert project.parts["snapcraft/core"]["build-snaps"] == ["test-snap"]
@@ -315,44 +317,42 @@ def test_application_plugins():
 
 
 @pytest.mark.parametrize(
-    ("base", "build_base"),
+    ("base", "build_base", "expected_plugin"),
     [
-        ("core20", None),
-        ("core20", "core20"),
-        ("core20", "devel"),
-        ("core22", None),
-        ("core22", "core22"),
-        ("core22", "devel"),
+        ("core20", None, craft_parts.plugins.dotnet_plugin.DotnetPlugin),
+        ("core20", "core20", craft_parts.plugins.dotnet_plugin.DotnetPlugin),
+        ("core20", "devel", craft_parts.plugins.dotnet_plugin.DotnetPlugin),
+        ("core22", None, craft_parts.plugins.dotnet_plugin.DotnetPlugin),
+        ("core22", "core22", craft_parts.plugins.dotnet_plugin.DotnetPlugin),
+        ("core22", "devel", craft_parts.plugins.dotnet_plugin.DotnetPlugin),
+        ("core24", None, craft_parts.plugins.dotnet_v2_plugin.DotnetV2Plugin),
+        ("core24", "core20", craft_parts.plugins.dotnet_v2_plugin.DotnetV2Plugin),
+        ("core24", "core22", craft_parts.plugins.dotnet_v2_plugin.DotnetV2Plugin),
+        ("core24", "core24", craft_parts.plugins.dotnet_v2_plugin.DotnetV2Plugin),
+        ("core24", "devel", craft_parts.plugins.dotnet_v2_plugin.DotnetV2Plugin),
     ],
 )
-def test_application_dotnet_registered(base, build_base, snapcraft_yaml):
-    """dotnet plugin is enabled for core22."""
+def test_application_dotnet_registered(
+    base, build_base, expected_plugin, snapcraft_yaml
+):
+    """dotnet plugin is enabled for core20 and later."""
     snapcraft_yaml(base=base, build_base=build_base)
     app = application.create_app()
 
     app._register_default_plugins()
 
     assert "dotnet" in craft_parts.plugins.get_registered_plugins()
+    assert craft_parts.plugins.get_plugin_class("dotnet") == expected_plugin
 
 
-@pytest.mark.parametrize(
-    ("base", "build_base"),
-    [
-        ("core24", None),
-        ("core24", "core20"),
-        ("core24", "core22"),
-        ("core24", "core24"),
-        ("core24", "devel"),
-    ],
-)
-def test_application_dotnet_not_registered(base, build_base, snapcraft_yaml):
-    """dotnet plugin is disabled for core24 and newer bases."""
-    snapcraft_yaml(base=base, build_base=build_base)
+def test_application_maven_use_not_registered(snapcraft_yaml):
+    """maven-use plugin is disabled."""
+    snapcraft_yaml(base="core24")
     app = application.create_app()
 
     app._register_default_plugins()
 
-    assert "dotnet" not in craft_parts.plugins.get_registered_plugins()
+    assert "maven-use" not in craft_parts.plugins.get_registered_plugins()
 
 
 def test_default_command_integrated(monkeypatch, mocker, new_dir):
@@ -416,6 +416,20 @@ def test_esm_pass(mocker, snapcraft_yaml, base):
         pass
     else:
         mock_dispatch.assert_called_once()
+
+
+def test_yaml_syntax_error(in_project_path, monkeypatch, capsys):
+    """Provide a user friendly error on yaml syntax errors."""
+    (in_project_path / "snapcraft.yaml").write_text("bad:\nyaml")
+    monkeypatch.setattr("sys.argv", ["snapcraft"])
+
+    application.main()
+
+    _, err = capsys.readouterr()
+    assert re.match(
+        "^error parsing 'snapcraft\\.yaml': .*\nDetailed information:",
+        err,
+    )
 
 
 @pytest.mark.parametrize("envvar", ["disable-fallback", None])
@@ -694,7 +708,7 @@ def test_store_key_error(mocker, capsys):
             """\
             No keyring found to store or retrieve credentials from.
             Recommended resolution: Ensure the keyring is working or SNAPCRAFT_STORE_CREDENTIALS is correctly exported into the environment
-            For more information, check out: https://snapcraft.io/docs/snapcraft-authentication
+            For more information, check out: https://documentation.ubuntu.com/snapcraft/stable/how-to/publishing/authenticate
         """
             # pylint: enable=[line-too-long]
         )
