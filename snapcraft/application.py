@@ -30,13 +30,13 @@ import craft_store
 from craft_application import Application, AppMetadata, launchpad, remote, util
 from craft_application.commands import get_other_command_group
 from craft_cli import emit
+from craft_parts.plugins.dotnet_v2_plugin import DotnetV2Plugin
 from craft_parts.plugins.plugins import PluginType
 from overrides import override
 
 import snapcraft
 import snapcraft_legacy
 from snapcraft import cli, commands, errors, models, services, store
-from snapcraft.parts import set_global_environment
 from snapcraft.utils import get_effective_base
 from snapcraft_legacy.cli import legacy
 
@@ -108,7 +108,11 @@ class Snapcraft(Application):
             snapcraft_yaml_path = get_snap_project(self.project_dir).project_file
             with snapcraft_yaml_path.open() as file:
                 _snapcraft_yaml_data = util.safe_yaml_load(file)
-        except craft_application.errors.ProjectFileError:
+        # defer to the project service to raise errors
+        except (
+            craft_application.errors.ProjectFileError,
+            craft_application.errors.YamlError,
+        ):
             return False
 
         base = _snapcraft_yaml_data.get("base")
@@ -128,9 +132,13 @@ class Snapcraft(Application):
         """Register per application plugins when initializing."""
         super()._register_default_plugins()
 
+        craft_parts.plugins.unregister("maven-use")
+
         if self._known_core24:
-            # dotnet is disabled for core24 and newer because it is pending a rewrite
+            # core22 uses dotnet v1
+            # core24 and newer uses dotnet v2
             craft_parts.plugins.unregister("dotnet")
+            craft_parts.plugins.register({"dotnet": DotnetV2Plugin})
 
     @property
     def app_config(self) -> dict[str, Any]:
@@ -177,7 +185,7 @@ class Snapcraft(Application):
                         f"{store.constants.ENVIRONMENT_STORE_CREDENTIALS} "
                         "is correctly exported into the environment"
                     ),
-                    docs_url="https://snapcraft.io/docs/snapcraft-authentication",
+                    docs_url="https://documentation.ubuntu.com/snapcraft/stable/how-to/publishing/authenticate",
                 )
             )
             return_code = 1
@@ -205,9 +213,17 @@ class Snapcraft(Application):
     @override
     def _enable_craft_parts_features(self) -> None:
         """Enable partitions if components are defined."""
-        if project := self._get_project_raw():
-            if project.get("components"):
-                craft_parts.Features(enable_partitions=True)
+        try:
+            project = self._get_project_raw()
+        # defer to the project service to raise errors
+        except (
+            craft_application.errors.ProjectFileError,
+            craft_application.errors.YamlError,
+        ):
+            return
+
+        if project and project.get("components"):
+            craft_parts.Features(enable_partitions=True)
 
     @staticmethod
     def _get_argv_command() -> str | None:
@@ -399,12 +415,6 @@ class Snapcraft(Application):
             extra_global_args=self._global_arguments,
             default_command=commands.PackCommand,
         )
-
-    @override
-    def _set_global_environment(self, info: craft_parts.ProjectInfo) -> None:
-        """Set global environment variables."""
-        super()._set_global_environment(info)
-        set_global_environment(info)
 
     def _get_project_raw(self) -> dict[str, Any] | None:
         """Get raw project data from the project service."""

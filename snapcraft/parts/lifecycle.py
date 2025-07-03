@@ -134,12 +134,6 @@ def _run_command(  # noqa PLR0913 (too-many-arguments)
     if not managed_mode:
         run_project_checks(project, assets_dir=assets_dir)
 
-        if command_name == "snap":
-            emit.progress(
-                "The 'snap' command is deprecated, use 'pack' instead.",
-                permanent=True,
-            )
-
     if _is_manager(parsed_args):
         if command_name == "clean" and not part_names:
             _clean_provider(project, parsed_args)
@@ -284,7 +278,7 @@ def _run_lifecycle_and_pack(  # noqa PLR0913
             compression=project.compression,
             name=project.name,
             version=process_version(project.version),
-            target_arch=project.get_build_for(),
+            target=project.get_build_for(),
         )
         emit.progress(f"Created snap package {snap_filename}", permanent=True)
 
